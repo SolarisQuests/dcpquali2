@@ -14,6 +14,92 @@ const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology:
 const db = client.db(dbName);
 
 
+export const Transcript = async (req, res) => {
+  try {
+    const { call_sid, audioPath } = req.query;
+
+    const assemblyAPIKey = process.env.ASSEMBLYAPIKEY;
+
+    async function getTranscription(audio_url, recording) {
+      try {
+        const response = await axios.post('https://api.assemblyai.com/v2/transcript', {
+          audio_url: audio_url,
+          speaker_labels: true
+        }, {
+          headers: {
+            'Authorization': `Bearer ${assemblyAPIKey}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        const transcriptId = response.data.id;
+
+        //  console.log(response.data)
+        while (true) {
+          const pollingResponse = await axios.get(`https://api.assemblyai.com/v2/transcript/${transcriptId}`, {
+            headers: {
+              'Authorization': `Bearer ${assemblyAPIKey}`,
+            }
+          });
+
+          const transcriptionResult = pollingResponse.data;
+          // console.log(transcriptionResult)    
+          if (transcriptionResult.status === "completed") {
+            const transcriptionData = JSON.stringify(transcriptionResult);
+            await updateDatabase(recording, transcriptionData);
+            // res.status(200).json({ "transcripe_data": transcriptionData, "message": 'Document updated successfully!' });
+            break;
+          } else if (transcriptionResult.status === "error") {
+            throw new Error(`Transcription failed: ${transcriptionResult.error}`);
+          } else {
+            await new Promise(resolve => setTimeout(resolve, 3000)); // wait for 3 seconds before polling again
+          }
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    }
+
+    async function updateDatabase(callSid, transcriptionData) {
+      try {
+
+        const collection = db.collection('transcript');
+
+        const filter = { call_sid: callSid };
+        const updateDoc = {
+          $set: { transcription: transcriptionData }
+        };
+
+        await collection.updateOne(filter, updateDoc);
+        res.status(200).json({ "transcripe_data": transcriptionData, "message": 'Document updated successfully!' })
+        console.log('Document updated successfully!');
+
+      } catch (error) {
+        console.error(error);
+      }
+    }
+
+    // Example usage
+    if(audioPath!=="--"){
+      getTranscription(audioPath, call_sid);
+    }else{
+      const collection = db.collection('transcript');
+
+        const filter = { call_sid: call_sid};
+        const updateDoc = {
+          $set: { transcription: "--" }
+        };
+        await collection.updateOne(filter, updateDoc);
+        res.status(200).json({ "transcripe_data": "--", "message": 'Document updated successfully!' })
+        console.log('Document updated successfully!');
+    }
+
+   
+  }
+  catch (err) {
+    res.status(500).json({ error: 'Internal Server Error' })
+  }
+}
 
 
 
@@ -176,4 +262,599 @@ export const FetchCalls = async (req, res) => {
     res.status(500).json({ message: 'Error fetching and storing recordings.', error: error.message });
   }
 };
+
+
+export const Promtstatustranscript = async (req, res) => {
+  const collectionName = 'twilio_recordings';
+
+  // API Endpoint
+  const apiEndpoint = 'http://localhost:8003/wrapper/transcript';
+
+  // Account SID and Auth Token
+   const accountSid = process.env.TWILIO_ACCOUNT_SID;
+
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+
+  // Function to convert media URL
+  function convertMediaUrl(mediaUrl) {
+    if (!mediaUrl) {
+      console.error('Media URL is undefined or null');
+      return null;
+    }
+    return `https://${accountSid}:${authToken}@${mediaUrl.substring(8)}`;
+
+  }
+
+  console.log('Connected to MongoDB successfully');
+
+  const db = client.db(dbName);
+  const collection = db.collection("recordings_rows");
+  const transcriptCollection = db.collection("transcript");
+  try {
+    // Fetch Twilio recordings from MongoDB
+    // Iterate over each recording
+    async function processRecording(recording) {
+      try {
+        // Check if transcript exists for the recording
+        const transcript = await transcriptCollection.findOne({
+          call_sid: recording.sid,
+          transcription: ""
+        });
+
+        // console.log(transcript)
+        if (transcript) {
+          console.log('Transcript not found for call SID:', recording.sid);
+          if(recording.media_url){
+            console.log(recording.media_url)
+            const convertedMediaUrl = convertMediaUrl(recording.media_url);
+
+
+
+
+            const apiResponse = await axios.get(apiEndpoint, {
+              params: {
+                call_sid: recording.sid,
+                audioPath: convertedMediaUrl,
+                from: recording.from,
+                to: recording.to,
+                start_time: recording.start_time
+              }
+            });
+  
+            // Assuming apiResponse.data contains the transcript data
+            console.log('Transcript fetched for call SID:', recording.sid);
+            return apiResponse.data;
+          }else{
+            const apiResponse = await axios.get(apiEndpoint, {
+              params: {
+                call_sid: recording.sid,
+                audioPath: "--",
+                from: recording.from,
+                to: recording.to,
+                start_time: recording.start_time
+              }
+            });
+            return apiResponse.data;
+          }
+       
+        } else {
+          console.log('Transcript already exists for call SID:', recording.sid);
+          return null; // Return null as transcript already exists
+        }
+      } catch (error) {
+        console.error('Error processing recording:', error.response ? error.response.data : error.message);
+        return null;
+      }
+    }
+    // const twilioRecordings = await collection.find().toArray();
+    const phoneNumbers = [
+      '+13462751361',
+      '+13462755401'
+    ];
+    
+    const twilioRecordings = await collection.find({
+      $or: [
+        { to: { $in: phoneNumbers } },
+        { from: { $in: phoneNumbers } }
+      ]
+    }).toArray();
+
+    // Iterate over each recording, process it, and update transcript if necessary
+    for (const recording of twilioRecordings) {
+      const transcriptData = await processRecording(recording);
+      // if (transcriptData !== null) {
+
+      //     await recordingsCollection.updateOne({ _id: recording._id }, { $set: { transcript: transcriptData } });
+      // }
+    }
+
+    res.end("success")
+  } catch (error) {
+    console.error('Error fetching Twilio recordings from MongoDB:', error);
+  }
+}
+
+export const Promtstatus = async (req, res) => {
+  const accountSid = process.env.TWILIO_ACCOUNT_SID;
+
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
+
+
+    function convertMediaUrl(mediaUrl) {
+      if (!mediaUrl) {
+        console.error('Media URL is undefined or null');
+        return null;
+      }
+      return `https://${accountSid}:${authToken}@${mediaUrl.substring(8)}`;
+  
+    }
+
+  console.log('Connected to MongoDB successfully');
+
+  const db = client.db(dbName);
+  const collection = db.collection("recordings_rows");
+  let validNames = [];
+  try {
+    // Fetch Twilio recordings from MongoDB
+    // Iterate over each recording
+    async function processRecording(recording, transcriptCollection) {
+      try {
+        // Check if transcript exists for the recording
+        const transcript = await transcriptCollection.findOne({ call_sid: recording.sid });
+
+        if (!transcript) {
+          let newtovalue = recording?.to;
+          let user_email=""
+
+         
+    if (newtovalue === "+441494977140") {
+      validNames = ["Des", "Dez", "Shannon", "Ashleigh", "Ashley", "Jessica", "Zainab", "Olivia", "--"];
+  } else if (newtovalue === "+442081598005"||newtovalue==="442081296141") {
+      validNames = ["Sushma", "Sara", "Margaret", "Gita", "Mita", "Emma", "--"];
+  }
+       
+       
+          
+          console.log('Transcript not found for call SID:', recording.sid);
+          if(recording.media_url){
+            const convertedMediaUrl = convertMediaUrl(recording.media_url);
+            let call_status = 'answered';
+            let new_patient_status = '--';
+            let appointment_status = 'No';
+            let appointment_status_text = '--';
+            let action_required_text = '--';
+            let action_required = 'No';
+            let insights = '--';
+            let new_patient = '--';
+            let prompt_text = '';
+            let services = '--';
+            let receptionist = '--';
+            let services_type = '--';
+            console.log(convertedMediaUrl)
+            let  call_sid= recording.sid;
+            let audio_url= convertedMediaUrl;
+            let from= recording.from;
+            let  to= recording.to;
+              let start_time= recording.start_time
+          
+              // console.log(audio_url)
+              let body = {
+                "audio_url": audio_url,
+                "prompts": [
+                  "Provide a summary in under 100 characters",
+                  "Note any scheduled appointmentsCheck if any appointments were scheduled during the discussion; if so, note the date and time",
+                  "Higlight for what services the patient has called for (Example: Teeth cleaning services)",
+                  "Mention if the patient (or relevant person) discussed is a new or existing individual",
+                  "Determine if the interaction in a phone call is managed by a live human agent or a computer-generated voice. Additionally, identify specific phrases that indicate business hours or closures such as we are closed for lunch or we are closed today",
+                  "What is the name of the receptionist - The person who connects from the clinic.",
+                  "Based on the conversation find out which service category term is used like Invisalign: teeth straightening/crooked teeth/braces/aligners/aligning teeth",
+                  "Identify any action items suggested for doctors or the caller that is the patient"
+                ]
+              }
+              const response = await axios.post(`https://prompt-llm.onrender.com/analyze-transcription`, body);
+              const data_prompt = response.data;
+          
+              // if (!response_point_2.match(/1\) ([^.]+)|2\) ([^.]+)|3\) ([^.]+)|4\) ([^.]+)|5\) ([^.]+)|6\) ([^.]+)|7\) ([^.]+)|8\) ([^.]+)/)) {
+              const live_call_keywords = ["caller reached", "phone call", "new and existing patients mentioned", "reason for call unclear", "unclear if new or existing patient"];
+              const pre_recorded_keywords = ["phone menu provides options", "no appointments scheduled", "closed for lunch", "closed today", "reopening at", "Live human agent not indicated", 'voicemail'];
+          
+              let is_live_call = false;
+              let is_pre_recorded_message = false;
+          
+              for (const keyword of live_call_keywords) {
+               
+                if (data_prompt.analyses[4].response.includes(keyword)) {
+                  is_live_call = true;
+                  break;
+                }
+              }
+          
+              for (const keyword of pre_recorded_keywords) {
+                
+                if (data_prompt.analyses[4].response.includes(keyword)) {
+                  is_pre_recorded_message = true;
+                  break;
+                }
+              }
+          
+              if (is_live_call) {
+              
+                call_status = 'hungup';
+              } else if (is_pre_recorded_message) {
+            
+                call_status = 'voicemail';
+              }
+              // console.log(data_prompt.analyses[1].response)
+          
+              if (data_prompt.analyses[0].response) {
+               
+                insights = data_prompt.analyses[0].response.trim();
+              }
+              appointment_status_text = data_prompt.analyses[1].response.trim();
+              if (appointment_status_text.includes("No appointment") || appointment_status_text.includes("no")) {
+                
+                appointment_status = 'No';
+              } else {
+              
+                appointment_status = 'Yes';
+              }
+             console.log(start_time,call_sid,audio_url,data_prompt.analyses)
+              // console.log(data_prompt)
+          
+              if (data_prompt.analyses[7].response) {
+                
+                action_required_text = data_prompt.analyses[7].response.trim();
+                if (action_required_text.includes("No action") || action_required_text.includes("No") || action_required_text.includes("no clear action") || action_required_text.includes("no")) {
+                  
+                  action_required = 'No';
+                } else {
+                  
+                  action_required = 'Yes';
+                }
+              }
+              console.log(start_time)
+              if (data_prompt.analyses[6].response) {
+                
+                services_type = data_prompt.analyses[6].response.trim();
+              }
+          
+              if (data_prompt.analyses[3].response) {
+                new_patient_status = data_prompt.analyses[3].response.includes("existing") || data_prompt.analyses[3].response.includes("Existing") ? 'Old' : 'New';
+              }
+              console.log(call_sid)
+              // if (data_prompt.analyses[5].response) {
+               
+              //   if (data_prompt.analyses[5].response.includes("No receptionist") || data_prompt.analyses[5].response.includes("not mentioned")
+              //     || data_prompt.analyses[5].response.includes("not provided")||data_prompt.analyses[5].response.includes("no name")) {
+               
+              //     receptionist = "--"
+              //   }
+              //   else if (data_prompt.analyses[5].response.includes("the name of the receptionist is")) {
+                  
+              //     const nameRegex = /the\s+name\s+of\s+the\s+receptionist\s+is\s+["']?([A-Za-z]+)["']?/i;
+              //     const matches = data_prompt.analyses[5].response.match(nameRegex);
+              //     if (matches && matches.length > 1) {
+                   
+              //       const name = matches[1];
+              //       receptionist = name.charAt(0).toUpperCase() + name.slice(1);
+                    
+              //     }
+              //   }
+                
+              // }
+              
+            if (data_prompt.analyses[5].response) {
+              if (
+                  data_prompt.analyses[5].response.includes("No receptionist") ||
+                  data_prompt.analyses[5].response.includes("not mentioned") ||
+                  data_prompt.analyses[5].response.includes("not provided") ||
+                  data_prompt.analyses[5].response.includes("no name")
+                  
+                                                            
+              ) {
+                  receptionist = "--";
+              } else if (newtovalue === "+441174502991" && data_prompt.analyses[5].response.toLowerCase().includes("the name of the receptionist is".toLowerCase())) {
+                  
+                  const nameRegex = /the\s+name\s+of\s+the\s+receptionist\s+is\s+["']?([A-Za-z]+)["']?/i;
+                  const matches = data_prompt.analyses[5].response.match(nameRegex);
+                  if (matches && matches.length > 1) {
+                      console.log("2")
+                      const name = matches[1];
+                      receptionist = name.charAt(0).toUpperCase() + name.slice(1);
+                  }
+              } else {
+                  let foundReceptionist = false;
+                  for (const name of validNames) {
+                      if (data_prompt.analyses[5].response.toLowerCase().includes(name.toLowerCase())) {
+                         
+                          receptionist = name.charAt(0).toUpperCase() + name.slice(1);
+                          console.log(receptionist)
+                          foundReceptionist = true;
+                          break; // Exit the loop once a valid receptionist name is found
+                      }
+                  }
+          
+                  if (!foundReceptionist) {
+                      
+                      receptionist = "--";
+                  }
+              }
+          }
+
+
+
+            console.log(audio_url)
+            if (data_prompt.analyses[6].response) {
+              if (data_prompt.analyses[6].response.includes("service category term used") || data_prompt.analyses[6].response.includes("service category term is")) {
+                const splitResponse = data_prompt.analyses[6].response.includes("service category term used") ?
+                                        data_prompt.analyses[6].response.split('service category term used') :
+                                        data_prompt.analyses[6].response.split('service category term is');
+                                        if (splitResponse.length > 1) {
+                                          const term = splitResponse[1].match(/"([^"]+)"/);
+                                          if (term) {
+                                              services = term[1];
+                                          }
+                                      }
+              }
+                else if(data_prompt.analyses[6].response.includes("the term used for teeth straightening services is")){
+                  const splitResponse = data_prompt.analyses[6].response.includes("the term used for teeth straightening services") ?
+                  data_prompt.analyses[6].response.split('the term used for teeth straightening services') :
+                  data_prompt.analyses[6].response.split('the term used for teeth straightening services is');
+                  if (splitResponse.length > 1) {
+                    const term = splitResponse[1].match(/"([^"]+)"/);
+                    if (term) {
+                        services = term[1];
+                    }
+                }
+                  }
+              // services = data_prompt.analyses[6].response.includes("service category term used is") || data_prompt.analyses[6].response.includes("service category term") ? data_prompt.analyses[6].response.split('term used')[1].trim() : '--';
+              
+            }
+            console.log(services)
+            const data_update = {
+              date_created: start_time,
+              call_sid: call_sid,
+              local_record_path: audio_url,
+              recordings: audio_url,
+              transcription: '',
+              transcript: '',
+              appointment_status,
+              action_required,
+              insights,
+              appointment_status_text,
+              action_required_text,
+              new_patient_status,
+              new_patient,
+              call_status,
+              prompt_text: data_prompt.analyses,
+              services_type: services_type,
+              services,
+              receptionist,
+              from: from,
+              trackingnumber: to
+            };
+        
+            // const dataJson = JSON.stringify(data_update);
+        
+        
+            const collection = db.collection('transcript');
+        
+            // const result = await collection.insertOne(data_update);
+
+            const result = await collection.updateOne(
+              { call_sid: recording.sid },
+              { $setOnInsert: data_update },
+              { upsert: true }
+            );
+            console.log('Transcript fetched for call SID:', recording.sid);
+            return result;
+          }else{
+            console.error('Media URL is undefined or null');
+      
+           
+           
+              
+              console.log('Transcript not found for call SID:', recording.sid);
+              // const convertedMediaUrl = convertMediaUrl(recording.media_url);
+      
+      
+              let call_status = 'answered';
+              let new_patient_status = '--';
+              let appointment_status = 'No';
+              let appointment_status_text = '--';
+              let action_required_text = '--';
+              let action_required = 'No';
+              let insights = '--';
+              let new_patient = '--';
+              let prompt_text = '';
+              let services = '--';
+              let receptionist = '--';
+              let services_type = '--';
+            
+            
+              
+               let  call_sid= recording.sid;
+              let audio_url= "--";
+              let from= recording.from;
+              let  to= recording.to;
+                let start_time= recording.start_time
+            
+              
+      
+                const data_update = {
+                  date_created: start_time,
+                  call_sid: call_sid,
+                  local_record_path: audio_url,
+                  recordings: audio_url,
+                  transcription: '',
+                  transcript: '',
+                  appointment_status,
+                  action_required,
+                  insights,
+                  appointment_status_text,
+                  action_required_text,
+                  new_patient_status,
+                  new_patient,
+                  call_status,
+                  prompt_text:"--",
+                  services_type: services_type,
+                  services,
+                  receptionist,
+                  from: from,
+                  trackingnumber: to
+                };
+            
+                // const dataJson = JSON.stringify(data_update);
+            
+            
+                const collection = db.collection('transcript');
+            
+                // const result = await collection.insertOne(data_update);
+                const result = await collection.updateOne(
+                  { call_sid: recording.sid },
+                  { $setOnInsert: data_update },
+                  { upsert: true }
+                );
+               
+              //   res.status(200).json({ "transcripe_data":data_prompt , "data": data_update })
+            
+              
+              console.log('Transcript fetched for call SID:', recording.sid);
+              return result;
+            } 
+          
+       
+
+
+         
+        
+          
+         
+
+          
+         
+        } else {
+          console.log('Transcript already exists for call SID:', recording.sid);
+          return null; // Return null as transcript already exists
+        }
+      } catch (error) {
+        if(error?.response?.data?.error==="Error analyzing transcription"){
+          const transcript = await transcriptCollection.findOne({ call_sid: recording.sid });
+  
+          if (!transcript) {
+            let newtovalue = recording?.to;
+            let user_email=""
+  
+           
+  
+  // Define the valid names based on the phone number
+      if (newtovalue === "+441494977140") {
+        validNames = ["Des", "Dez", "Shannon", "Ashleigh", "Ashley", "Jessica", "Zainab", "Olivia", "--"];
+    } else if (newtovalue === "+442081598005"||newtovalue==="442081296141") {
+        validNames = ["Sushma", "Sara", "Margaret", "Gita", "Mita", "Emma", "--"];
+    }
+         
+         
+            
+            console.log('Transcript not found for call SID:', recording.sid);
+            const convertedMediaUrl = convertMediaUrl(recording.media_url);
+  
+  
+            let call_status = 'answered';
+            let new_patient_status = '--';
+            let appointment_status = 'No';
+            let appointment_status_text = '--';
+            let action_required_text = '--';
+            let action_required = 'No';
+            let insights = '--';
+            let new_patient = '--';
+            let prompt_text = '';
+            let services = '--';
+            let receptionist = '--';
+            let services_type = '--';
+            console.log(convertedMediaUrl)
+          
+            
+             let  call_sid= recording.sid;
+            let audio_url= convertedMediaUrl;
+            let from= recording.from;
+            let  to= recording.to;
+              let start_time= recording.start_time
+          
+            
+  
+              const data_update = {
+                date_created: start_time,
+                call_sid: call_sid,
+                local_record_path: audio_url,
+                recordings: audio_url,
+                transcription: '',
+                transcript: '',
+                appointment_status,
+                action_required,
+                insights,
+                appointment_status_text,
+                action_required_text,
+                new_patient_status,
+                new_patient,
+                call_status,
+                prompt_text:"--",
+                services_type: services_type,
+                services,
+                receptionist,
+                from: from,
+                trackingnumber: to
+              };
+          
+              // const dataJson = JSON.stringify(data_update);
+          
+          
+              const collection = db.collection('transcript');
+          
+              // const result = await collection.insertOne(data_update);
+              const result = await collection.updateOne(
+                { call_sid: recording.sid },
+                { $setOnInsert: data_update },
+                { upsert: true }
+              );
+             
+            //   res.status(200).json({ "transcripe_data":data_prompt , "data": data_update })
+          
+            
+            console.log('Transcript fetched for call SID:', recording.sid);
+            return result;
+          } else {
+            console.log('Transcript already exists for call SID:', recording.sid);
+            return null; // Return null as transcript already exists
+          }
+        }else{
+          console.error('Error processing recording:', error.response ? error.response.data : error.message);
+          return null;
+        }
+      }
+    }
+    // const twilioRecordings = await collection.find().toArray();
+    const phoneNumbers = [
+      '+13462751361',
+      '+13462755401'
+    ];
+    
+    const twilioRecordings = await collection.find({
+      $or: [
+        { to: { $in: phoneNumbers } },
+        { from: { $in: phoneNumbers } }
+      ]
+    }).toArray();
+    const transcriptCollection = db.collection("transcript");
+    // Iterate over each recording, process it, and update transcript if necessary
+    for (const recording of twilioRecordings) {
+      await processRecording(recording, transcriptCollection);
+
+    }
+
+    res.end("success")
+  } catch (error) {
+    console.error('Error fetching Twilio recordings from MongoDB:', error.message);
+  }
+}
 

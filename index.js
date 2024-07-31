@@ -29,6 +29,25 @@ app.use("/wrapper", wrapperroute);
 
 const baseURL = 'https://dcpquali2.onrender.com/wrapper'; 
 
+const callPromptEndpoint = async () => {
+  try {
+    const response = await axios.get(baseURL + '/promtstatus');
+    console.log('Response from /promtstatus:', response.data);
+  } catch (error) {
+    console.error('Error calling /promtstatus:', error);
+  }
+};
+
+
+const callTranscriptEndpoint = async () => {
+  try {
+    const response = await axios.get(baseURL + '/promtstatustranscript');
+    console.log('Response from /transcript:', response.data);
+  } catch (error) {
+    console.error('Error calling /transcript:', error);
+  }
+};
+
 const callFetchcallEndpoint = async () => {
   try {
     const response = await axios.get(baseURL + '/fetchCalls');
@@ -38,11 +57,27 @@ const callFetchcallEndpoint = async () => {
   }
 };
 
+const callAllEndpoints = async () => {
+  try {
+    
+    console.log("cron starting")
+     await callPromptEndpoint();
+     await callTranscriptEndpoint();
+     await callFetchcallEndpoint();
+   
+  
+  } catch (error) {
+    console.error('Error calling endpoints:', error);
+  }
+};
 
-
-cron.schedule('0 * * * *', () => {
-  callFetchcallEndpoint();
+cron.schedule('0 */2 * * *', () => {
+  callAllEndpoints();
 });
+
+
+
+
 
 const PORT = 8003;
 
