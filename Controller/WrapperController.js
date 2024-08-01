@@ -17,7 +17,7 @@ const db = client.db(dbName);
 export const Transcript = async (req, res) => {
   try {
     const { call_sid, audioPath } = req.query;
-
+    console.log("audiopath::::",audioPath)
     const assemblyAPIKey = process.env.ASSEMBLYAPIKEY;
 
     async function getTranscription(audio_url, recording) {
@@ -78,9 +78,10 @@ export const Transcript = async (req, res) => {
         console.error(error);
       }
     }
-
+console.log("audiopath::::",audioPath)
     // Example usage
     if(audioPath!=="--"){
+      console.log("entered",audioPath,call_sid)
       getTranscription(audioPath, call_sid);
     }else{
       const collection = db.collection('transcript');
@@ -103,172 +104,219 @@ export const Transcript = async (req, res) => {
 
 
 
+// export const FetchCalls = async (req, res) => {
+//   try {
+//     const accountSid = process.env.TWILIO_ACCOUNT_SID;
+//     const authToken = process.env.TWILIO_AUTH_TOKEN;
+//     const client = twilio(accountSid, authToken);
+
+ 
+
+//     const phoneNumbers = [ '+13462751361',
+//              '+13462755401'];
+
+
+
+//     const promises = phoneNumbers.map(number => {
+//       return Promise.all([
+//         // Fetch calls where the number is the 'to' number
+//         client.calls.list({
+//           to: number,
+//           // Optionally, add additional filters like date range here
+//         }),
+//         // Fetch calls where the number is the 'from' number
+//         client.calls.list({
+//           from: number,
+//           // Optionally, add additional filters like date range here
+//         })
+//       ]);
+//     });
+
+//     // Resolve all promises to get the calls for all numbers
+//     const results = await Promise.all(promises);
+
+//     // Flatten the results into a single array
+//     const filteredCalls = results.flat().flat(); // Flatten the nested arrays
+//  console.log("filteredcalls:::::",filteredCalls)
+
+
+//     const callToMap = new Map();
+//     const callFroMMap = new Map();
+//     const oldcollection = db.collection('recordings_rows');
+   
+
+//     for (let call of filteredCalls) {
+//       // Check if the call exists in the database, if not, insert it
+//       const existingCall = await oldcollection.findOne({ call_sid: call.sid });
+    
+//       // console.log("direction:::",call?.direction)
+//       if (!existingCall) {
+//         console.log("hi")
+//         const callData = {
+//           _id: call.sid,
+//           call_sid: call.sid,
+//           sid: call.sid,
+//           account_sid: call.accountSid,
+//           from: call.from,
+//           to: call.to,
+//           status: call.status,
+//           start_time: call.startTime,
+//           end_time: call.endTime,
+//           duration: call.duration,
+//           date_created: call.dateCreated,
+//           date_updated: call.dateUpdated,
+//           direction: call.direction,
+//           api_version: call.apiVersion,
+//           price: call.price,
+//           price_unit: call.priceUnit,
+//           annotation: call.annotation,
+//           forwarded_from: call.forwardedFrom,
+//           group_sid: call.groupSid,
+//           caller_name: call.callerName,
+//           uri: call.uri,
+//           direction:call.direction
+//         };
+
+//         await oldcollection.updateOne(
+//           { _id: call.sid },
+//           { $set: callData },
+//           { upsert: true }
+//         );
+//       }
+//     }
+//     console.log('Recording fetching and storing complete.');
+
+//     // res.json(allCalls);
+//     // console.log(allCalls?.length)
+//   } catch (error) {
+//     console.error('Error fetching and storing recordings:', error);
+//     res.status(500).json({ message: 'Error fetching and storing recordings.', error: error.message });
+//   }
+// };
+
+
+
 export const FetchCalls = async (req, res) => {
   try {
     const accountSid = process.env.TWILIO_ACCOUNT_SID;
     const authToken = process.env.TWILIO_AUTH_TOKEN;
     const client = twilio(accountSid, authToken);
+    console.log('Fetching and storing recordings...');
 
- 
-
+    
     const phoneNumbers = [ '+13462751361',
-             '+13462755401'];
-
-    // // Create an array of promises for each phone number
-    // const promises = phoneNumbers.map(number =>
-    //   client.calls.list({
-    //     to: number,
-    //     // Optionally, add additional filters like date range here
-    //   })
-    // );
-
-    // // Resolve all promises to get the calls for all numbers
-    // const results = await Promise.all(promises);
-
-    // // Flatten the results into a single array
-    // const allCalls = results.flat();
-    // res.json(allCalls);
-    // console.log(allCalls?.length)
-
-    const promises = phoneNumbers.map(number => {
-      return Promise.all([
-        // Fetch calls where the number is the 'to' number
-        client.calls.list({
-          to: number,
-          // Optionally, add additional filters like date range here
-        }),
-        // Fetch calls where the number is the 'from' number
-        client.calls.list({
-          from: number,
-          // Optionally, add additional filters like date range here
-        })
-      ]);
-    });
-
-    // Resolve all promises to get the calls for all numbers
-    const results = await Promise.all(promises);
-
-    // Flatten the results into a single array
-    const filteredCalls = results.flat().flat(); // Flatten the nested arrays
+      '+13462755401'];
 
 
 
-    const callToMap = new Map();
-    const callFroMMap = new Map();
+const promises = phoneNumbers.map(number => {
+return Promise.all([
+ // Fetch calls where the number is the 'to' number
+ client.calls.list({
+   to: number,
+   // Optionally, add additional filters like date range here
+ }),
+ // Fetch calls where the number is the 'from' number
+ client.calls.list({
+   from: number,
+   // Optionally, add additional filters like date range here
+ })
+]);
+});
+
+// Resolve all promises to get the calls for all numbers
+const results = await Promise.all(promises);
+
+// Flatten the results into a single array
+const calls = results.flat().flat(); 
+// console.log("cals:::::",calls)
     const oldcollection = db.collection('recordings_rows');
-    // for (let call of filteredCalls ) {
-    //   // console.log( call.to,call.from)
-    //   callToMap.set(call.sid, call.to);
-    //   callFroMMap.set(call.sid, call.from)
-    //   const existingRecording = await oldcollection.findOne({ call_sid: call.sid });
-    //   if (!existingRecording) {
-    //     // console.log(`Call SID: ${call.sid}, From: ${call.from}, To: ${call.to}, Status: ${call.status},${call}`);
 
-    //     const callRecordings = await client.recordings.list({ callSid: call.sid });
-    //     const to = callToMap.get(call.sid);
-    //     const from = callFroMMap.get(call.sid);
-    //     if (to) {
-    //       callRecordings.forEach(recording => {
-    //         recording.to = to;
+    for (let call of calls) {
+      const existingRecording = await oldcollection.findOne({ call_sid: call.sid });
+      if (!existingRecording) {
+        const callRecordings = await client.recordings.list({ callSid: call.sid });
+console.log("callRecordings:::::",callRecordings)
+        if (callRecordings.length > 0) {
+    
+          const serializedRecordings = callRecordings.map(recording => ({
+            _id: recording.sid,
+            _airbyte_unique_key: recording.sid,
+            subresource_uris: recording.subresourceUris,
+            date_updated: recording.dateUpdated,
+            date_created: recording.dateCreated,
+            source: recording.source,
+            api_version: recording.apiVersion,
+            uri: recording.uri,
+            media_url: recording.mediaUrl,
+            sid: recording.sid,
+            duration: recording.duration,
+            direction:call.direction,
+            price_unit: recording.priceUnit,
+            start_time: recording.startTime,
+            channels: recording.channels,
+            price: recording.price,
+            call_sid: recording.callSid,
+            account_sid: recording.accountSid,
+            call_status: recording.status,
+            to: call.to,
+            from: call.from,
+            _airbyte_ab_id: recording._airbyte_ab_id,
+            _airbyte_emitted_at: recording._airbyte_emitted_at,
+            _airbyte_normalized_at: recording._airbyte_normalized_at,
+            _airbyte_recordings_hashid: recording._airbyte_recordings_hashid
+          }));
+         console.log("serializedRecordings",serializedRecordings)
+          const result = await oldcollection.insertMany(serializedRecordings);
+        } else {
+         console.log("direction:::",call.direction)
+          const defaultRecord = {
+            _id: call.sid,
+            account_sid: call.accountSid,
+            _airbyte_unique_key: call.sid,
+            subresource_uris: call.subresourceUris,
+            date_updated: null,
+            date_created: call.dateCreated,
+            source: null,
+            api_version: null,
+            uri: call.uri,
+            media_url: null,
+            sid: null,
+            duration: null,
+            direction:call.direction,
+            price_unit: null,
+            start_time: null,
+            channels: null,
+            price: null,
+            call_sid: call.sid,
+            account_sid: call.accountSid,
+            call_status: call.status,
+            to: call.to,
+            from: call.from,
+            _airbyte_ab_id: null,
+            _airbyte_emitted_at: null,
+            _airbyte_normalized_at: null,
+            _airbyte_recordings_hashid: null,
+            
+          };
 
-    //       });
-    //     }
-    //     if (from) {
-    //       callRecordings.forEach(recording => {
-
-    //         recording.from = from;
-    //       });
-    //     }
-    //     console.log('Call Recordings:', callRecordings);
-
-    //     if (callRecordings.length > 0) {
-    //       const serializedRecordings = callRecordings.map(recording => {
-    //         return JSON.stringify({
-    //           _id: recording.sid,
-    //           _airbyte_unique_key: recording.sid,
-    //           subresource_uris: recording.subresourceUris,
-    //           date_updated: recording.dateUpdated,
-    //           date_created: recording.dateCreated,
-    //           source: recording.source,
-    //           api_version: recording.apiVersion,
-    //           uri: recording.uri,
-    //           media_url: recording.mediaUrl,
-    //           sid: recording.sid,
-    //           duration: recording.duration,
-    //           price_unit: recording.priceUnit,
-    //           start_time: recording.startTime,
-    //           channels: recording.channels,
-    //           price: recording.price,
-    //           call_sid: recording.callSid,
-    //           account_sid: recording.accountSid,
-    //           call_status: recording.status,
-    //           to: recording.to,
-    //           from: recording.from,
-    //           _airbyte_ab_id: recording._airbyte_ab_id,
-    //           _airbyte_emitted_at: recording._airbyte_emitted_at,
-    //           _airbyte_normalized_at: recording._airbyte_normalized_at,
-    //           _airbyte_recordings_hashid: recording._airbyte_recordings_hashid
-    //         });
-    //       });
-
-    //       const result = await oldcollection.insertMany(serializedRecordings.map(serialized => JSON.parse(serialized)));
-    //       // console.log(`${result.insertedCount} recordings inserted into MongoDB`);
-    //     } else {
-    //       console.log('No recordings found for this call.');
-    //     }
-    //   }
-    // }
-
-    for (let call of filteredCalls) {
-      // Check if the call exists in the database, if not, insert it
-      const existingCall = await oldcollection.findOne({ call_sid: call.sid });
-      if (!existingCall) {
-        const callData = {
-          _id: call.sid,
-          call_sid: call.sid,
-          account_sid: call.accountSid,
-          from: call.from,
-          to: call.to,
-          status: call.status,
-          start_time: call.startTime,
-          end_time: call.endTime,
-          duration: call.duration,
-          date_created: call.dateCreated,
-          date_updated: call.dateUpdated,
-          direction: call.direction,
-          api_version: call.apiVersion,
-          price: call.price,
-          price_unit: call.priceUnit,
-          annotation: call.annotation,
-          forwarded_from: call.forwardedFrom,
-          group_sid: call.groupSid,
-          caller_name: call.callerName,
-          uri: call.uri
-        };
-
-        await oldcollection.updateOne(
-          { _id: call.sid },
-          { $set: callData },
-          { upsert: true }
-        );
+          await oldcollection.insertOne(defaultRecord);
+          console.log(`Inserted default record for call SID: ${call.sid}`);
+        }
       }
     }
-    console.log('Recording fetching and storing complete.');
 
-    // res.json(allCalls);
-    // console.log(allCalls?.length)
+    console.log('Recording fetching and storing complete.');
   } catch (error) {
     console.error('Error fetching and storing recordings:', error);
-    res.status(500).json({ message: 'Error fetching and storing recordings.', error: error.message });
   }
-};
-
+}
 
 export const Promtstatustranscript = async (req, res) => {
   const collectionName = 'twilio_recordings';
 
   // API Endpoint
-  const apiEndpoint = 'http://localhost:8003/wrapper/transcript';
+  const apiEndpoint = 'https://dcpquali2.onrender.com/wrapper/transcript';
 
   // Account SID and Auth Token
    const accountSid = process.env.TWILIO_ACCOUNT_SID;
@@ -361,7 +409,9 @@ export const Promtstatustranscript = async (req, res) => {
 
     // Iterate over each recording, process it, and update transcript if necessary
     for (const recording of twilioRecordings) {
+      if(recording.sid){
       const transcriptData = await processRecording(recording);
+      }
       // if (transcriptData !== null) {
 
       //     await recordingsCollection.updateOne({ _id: recording._id }, { $set: { transcript: transcriptData } });
@@ -398,6 +448,7 @@ export const Promtstatus = async (req, res) => {
     // Fetch Twilio recordings from MongoDB
     // Iterate over each recording
     async function processRecording(recording, transcriptCollection) {
+      console.log("recording:::::",recording)
       try {
         // Check if transcript exists for the recording
         const transcript = await transcriptCollection.findOne({ call_sid: recording.sid });
@@ -436,7 +487,7 @@ export const Promtstatus = async (req, res) => {
             let from= recording.from;
             let  to= recording.to;
               let start_time= recording.start_time
-          
+            let direction=recording.direction
               // console.log(audio_url)
               let body = {
                 "audio_url": audio_url,
@@ -631,7 +682,8 @@ export const Promtstatus = async (req, res) => {
               services,
               receptionist,
               from: from,
-              trackingnumber: to
+              trackingnumber: to,
+              direction:direction
             };
         
             // const dataJson = JSON.stringify(data_update);
@@ -678,7 +730,7 @@ export const Promtstatus = async (req, res) => {
               let from= recording.from;
               let  to= recording.to;
                 let start_time= recording.start_time
-            
+              let direction=recording.direction
               
       
                 const data_update = {
@@ -701,7 +753,8 @@ export const Promtstatus = async (req, res) => {
                   services,
                   receptionist,
                   from: from,
-                  trackingnumber: to
+                  trackingnumber: to,
+                  direction:direction
                 };
             
                 // const dataJson = JSON.stringify(data_update);
@@ -780,7 +833,7 @@ export const Promtstatus = async (req, res) => {
             let from= recording.from;
             let  to= recording.to;
               let start_time= recording.start_time
-          
+          let direction=recording.direction
             
   
               const data_update = {
@@ -803,7 +856,8 @@ export const Promtstatus = async (req, res) => {
                 services,
                 receptionist,
                 from: from,
-                trackingnumber: to
+                trackingnumber: to,
+                direction:direction
               };
           
               // const dataJson = JSON.stringify(data_update);
@@ -845,10 +899,13 @@ export const Promtstatus = async (req, res) => {
         { from: { $in: phoneNumbers } }
       ]
     }).toArray();
+    // console.log(twilioRecordings)
     const transcriptCollection = db.collection("transcript");
     // Iterate over each recording, process it, and update transcript if necessary
     for (const recording of twilioRecordings) {
-      await processRecording(recording, transcriptCollection);
+      if(recording.sid){
+        await processRecording(recording, transcriptCollection);
+      }
 
     }
 
@@ -856,5 +913,97 @@ export const Promtstatus = async (req, res) => {
   } catch (error) {
     console.error('Error fetching Twilio recordings from MongoDB:', error.message);
   }
+}
+
+
+export const inboundcallscount=async(req,res)=>{
+  const user_email = req.query.user_email;
+  const period = req.query.period;
+  const start_date = req.query.start_date;
+  const end_date = req.query.end_date;
+  const currentDate = new Date();
+  if (!start_date && !end_date) {
+    const startDate = new Date(currentDate);
+    startDate.setDate(startDate.getDate() - parseInt(period || 0));
+    console.log(currentDate)
+    console.log(startDate)
+  }
+ try {
+  var days = parseInt(period);
+  // Normalize the time component of currentDate
+  currentDate.setHours(0, 0, 0, 0);
+  var currentDay = currentDate.getDay();
+  var startOfWeek = new Date(currentDate);
+  var differenceToMonday = currentDay - 1;
+  if (differenceToMonday < 0) differenceToMonday += 7;
+  startOfWeek.setDate(currentDate.getDate() - differenceToMonday);
+  const collection = db.collection("recordings_rows");
+  const phoneNumbers = [
+    '+13462751361',
+    '+13462755401'
+  ];
+  const twilioRecordings = await collection.find({
+    $or: [
+      { to: { $in: phoneNumbers } },
+      { from: { $in: phoneNumbers } }
+    ]
+  }).toArray();
+
+let filteredData=[]
+
+  if (start_date && end_date) {
+    var startDateObj = new Date(start_date);
+    var endDateObj = new Date(end_date);
+    endDateObj.setHours(23, 59, 59, 999);
+    filteredData = twilioRecordings.filter(function (item) {
+      var itemStartDate = new Date(item.date_created);
+      return itemStartDate >= startDateObj && itemStartDate <= endDateObj;
+    })
+  } else {
+    filteredData = twilioRecordings.filter(function (item) {
+      var itemDate = new Date(item.date_created);
+      // Normalize the time component of itemDate
+      itemDate.setHours(0, 0, 0, 0);
+      var differenceInTime = currentDate.getTime() - itemDate.getTime();
+      var differenceInDays = differenceInTime / (1000 * 3600 * 24);
+      // Return true if the difference in days falls within the selected time period
+      console.log("days",days)
+      if (days === 0 && itemDate.getMonth() === currentDate.getMonth() && itemDate.getFullYear() === currentDate.getFullYear()) {
+        return true;
+      } else if (days === 7 && itemDate >= startOfWeek && itemDate <= currentDate) {
+        return true;
+      } else if (days === 30 && differenceInDays <= 30) {
+        return true;
+      } else if (days === 60 && differenceInDays <= 60) {
+        return true;
+      } else if (days === 90 && differenceInDays <= 90) {
+        return true;
+      }
+      return false;
+    });
+  }
+ 
+  const inboundCalls = filteredData.filter(recording => recording.direction === 'inbound');
+  const outboundApiCalls = filteredData.filter(recording => recording.direction === 'outbound-api');
+  const outboundDialCalls = filteredData.filter(recording => recording.direction === 'outbound-dial');
+
+  // Response with counts
+  res.json({
+    inbound: {
+      count: inboundCalls.length,
+      calls: inboundCalls
+    },
+    outboundApi: {
+      count: outboundApiCalls.length,
+      calls: outboundApiCalls
+    },
+    outboundDial: {
+      count: outboundDialCalls.length,
+      calls: outboundDialCalls
+    }
+  });
+ } catch (error) {
+  console.log(error)
+ }
 }
 
