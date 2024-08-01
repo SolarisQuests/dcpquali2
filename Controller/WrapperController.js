@@ -984,17 +984,24 @@ let filteredData=[]
   }
  
   const inboundCalls = filteredData.filter(recording => recording.direction === 'inbound');
+  const qualifiedInbound = inboundCalls.filter(call => call.status === 'qualified').length;
+  const notQualifiedInbound = inboundCalls.filter(call => call.status === 'not qualified').length;
   const outboundApiCalls = filteredData.filter(recording => recording.direction === 'outbound-api');
   const outboundDialCalls = filteredData.filter(recording => recording.direction === 'outbound-dial');
-
+  const qualifiedInbound2 = outboundApiCalls .filter(call => call.status === 'qualified').length;
+  const notQualifiedInbound2 = outboundApiCalls .filter(call => call.status === 'not qualified').length;
   // Response with counts
   res.json({
     inbound: {
       count: inboundCalls.length,
+      qualifiedCount: qualifiedInbound,
+      notQualifiedCount: notQualifiedInbound,
       calls: inboundCalls
     },
     outboundApi: {
       count: outboundApiCalls.length,
+      qualifiedCount: qualifiedInbound2,
+      notQualifiedCount: notQualifiedInbound2,
       calls: outboundApiCalls
     },
     outboundDial: {
