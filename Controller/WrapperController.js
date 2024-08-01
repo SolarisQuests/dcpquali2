@@ -947,6 +947,9 @@ export const inboundcallscount=async(req,res)=>{
     ]
   }).toArray();
 
+  twilioRecordings.sort((a, b) => new Date(b.date_created) - new Date(a.date_created));
+
+
 let filteredData=[]
 
   if (start_date && end_date) {
