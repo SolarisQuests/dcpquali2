@@ -203,8 +203,7 @@ export const FetchCalls = async (req, res) => {
     const client = twilio(accountSid, authToken);
     console.log('Fetching and storing recordings...');
 
-    
-    const phoneNumbers = [ '+13462751361',
+    const phoneNumbers = [ '+13462751361','+13464366617',
       '+13462755401'];
 
 
@@ -395,10 +394,8 @@ export const Promtstatustranscript = async (req, res) => {
       }
     }
     // const twilioRecordings = await collection.find().toArray();
-    const phoneNumbers = [
-      '+13462751361',
-      '+13462755401'
-    ];
+    const phoneNumbers = [ '+13462751361','+13464366617',
+      '+13462755401'];
     
     const twilioRecordings = await collection.find({
       $or: [
@@ -888,10 +885,8 @@ export const Promtstatus = async (req, res) => {
       }
     }
     // const twilioRecordings = await collection.find().toArray();
-    const phoneNumbers = [
-      '+13462751361',
-      '+13462755401'
-    ];
+    const phoneNumbers = [ '+13462751361','+13464366617',
+      '+13462755401'];
     
     const twilioRecordings = await collection.find({
       $or: [
@@ -938,10 +933,8 @@ export const inboundcallscount=async(req,res)=>{
   if (differenceToMonday < 0) differenceToMonday += 7;
   startOfWeek.setDate(currentDate.getDate() - differenceToMonday);
   const collection = db.collection("recordings_rows");
-  const phoneNumbers = [
-    '+13462751361',
-    '+13462755401'
-  ];
+  const phoneNumbers = [ '+13462751361','+13464366617',
+    '+13462755401'];
   const twilioRecordings = await collection.find({
     $or: [
       { to: { $in: phoneNumbers } },
