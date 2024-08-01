@@ -1007,3 +1007,40 @@ let filteredData=[]
  }
 }
 
+export const updateCallStatusAndComments = async (req, res) => {
+  const { call_sid, status, comments } = req.body; // Expecting call_sid, status, and comments in the request body
+
+  try {
+    // Validate call_sid
+    if (!call_sid) {
+      return res.status(400).json({ error: 'Call ID is required' });
+    }
+
+    // Connect to the collection
+    const collection = db.collection("recordings_rows");
+
+    // Find the document by call_sid and update the status and comments
+    const result = await collection.updateOne(
+      { call_sid: call_sid }, // Match documents based on call_sid
+      {
+        $set: {
+          status: status || '', // Set status if provided, else set empty string
+          comments: comments || '' // Set comments if provided, else set empty string
+        }
+      },
+      { upsert: true } // Creates the document if it does not exist
+    );
+
+    // Check if the document was modified
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+
+    // Response with a success message
+    res.json({ message: 'Status and comments updated successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'An error occurred while updating the document' });
+  }
+};
+
