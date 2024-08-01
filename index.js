@@ -74,9 +74,9 @@ const callAllEndpoints = async () => {
 // cron.schedule('0 */2 * * *', () => {
 //   callAllEndpoints();
 // });
-cron.schedule('*/2 * * * *', () => {
-  callAllEndpoints();
-});
+// cron.schedule('*/2 * * * *', () => {
+//   callAllEndpoints();
+// });
 
 
 
