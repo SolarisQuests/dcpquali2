@@ -987,7 +987,10 @@ let filteredData=[]
   const inboundCalls = filteredData.filter(recording => recording.direction === 'inbound');
   const qualifiedInbound = inboundCalls.filter(call => call.status === 'qualified').length;
   const notQualifiedInbound = inboundCalls.filter(call => call.status === 'not qualified').length;
-  const outboundApiCalls = filteredData.filter(recording => recording.direction === 'outbound-api');
+  // const outboundApiCalls = filteredData.filter(recording => recording.direction === 'outbound-api');
+    const outboundApiCalls = filteredData.filter(recording => 
+    recording.direction === 'outbound-api' && recording.media_url !== null
+  );
   const outboundDialCalls = filteredData.filter(recording => recording.direction === 'outbound-dial');
   const qualifiedInbound2 = outboundApiCalls .filter(call => call.status === 'qualified').length;
   const notQualifiedInbound2 = outboundApiCalls .filter(call => call.status === 'not qualified').length;
